@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tim Zellers Ausreden-Generator</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    h1 { font-size: 2rem; margin: 0 0 4px; }
+    .sub { color: #888; margin-bottom: 28px; }
+
+    .box {
+      background: #1c1c1c;
+      border: 1px solid #333;
+      border-radius: 18px;
+      padding: 28px 24px;
+      max-width: 560px;
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 170px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .intro { color: #888; font-size: .95rem; margin-bottom: 10px; }
+    #excuse { font-size: 1.35rem; line-height: 1.45; font-weight: 600; }
+    #excuse.pop { animation: pop .35s ease-out; }
+    @keyframes pop {
+      0%   { opacity: 0; transform: scale(.92); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .meter { margin-top: 18px; font-size: .85rem; color: #888; }
+    .bar { height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+    #fill { height: 100%; width: 0; background: linear-gradient(90deg, #f5c542, #e03b3b); transition: width .4s; }
+
+    .buttons { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; justify-content: center; }
+    button {
+      font-size: 1.05rem; padding: 14px 24px; border-radius: 999px; border: none; cursor: pointer;
+      transition: transform .12s;
+    }
+    button:hover { transform: scale(1.05); }
+    button:active { transform: scale(.95); }
+    #next { background: #e03b3b; color: #fff; font-weight: 700; }
+    #copy { background: #333; color: #eee; }
+    .count { margin-top: 16px; color: #666; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <h1>💀 Tim Zellers Ausreden-Generator</h1>
+  <div class="sub">Für jede Situation, in der man eigentlich einfach keine Lust hatte.</div>
+
+  <div class="box">
+    <div class="intro">Sorry, ich komme zu spät, weil …</div>
+    <div id="excuse">… ich zuerst auf den Knopf da unten drücken musste.</div>
+    <div class="meter">
+      Glaubwürdigkeit: <span id="cred">–</span>
+      <div class="bar"><div id="fill"></div></div>
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button id="next">🎲 Neue Ausrede</button>
+    <button id="copy">📋 Kopieren</button>
+  </div>
+  <div class="count" id="count"></div>
+
+  <script>
+    const EXCUSES = [
+      "mein Grosi gestorben ist. Schon wieder. Das ist jetzt das vierte Mal dieses Jahr, die Frau ist einfach nicht kleinzukriegen.",
+      "meine Katze gestorben ist. Ich habe sie nie gemocht, aber ich musste trotzdem so tun, als wäre ich traurig, sonst hätte meine Freundin mich verlassen.",
+      "mein Grosi Geburtstag hat. Sie wird 94. Bei dem Tempo muss man jede Feier mitnehmen, die man kriegen kann.",
+      "ich den Rasen mähen musste. Der Rasenmäher hat dabei leider auch den Gartenzwerg des Nachbarn erwischt. Ich war noch an der Beerdigung.",
+      "meine Freundin Bedürfnisse hatte. Ich war nach drei Minuten fertig, aber das Kuscheln danach hat 40 Minuten gedauert.",
+      "mein Goldfisch gestorben ist und ich ihn würdevoll die Toilette hinunterspülen wollte. Mit Rede. Und Trompete.",
+      "ich das Erbe vom Grosi zählen musste. Es war nicht viel. Ich bin immer noch beleidigt.",
+      "mein Onkel aus dem Spital angerufen hat. Er wollte nur sagen, dass das Essen dort besser ist als bei meiner Tante. Ein Notfall, quasi.",
+      "die Katze vom Nachbarn vor mein Velo gelaufen ist. Die Katze ist okay. Das Velo nicht. Ich trauere um das Velo.",
+      "ich das Testament vom Grosi ein bisschen überarbeiten musste, solange sie noch Mittagsschlaf macht.",
+      "meine Schwiegermutter zu Besuch ist und ich mich im Keller verstecken musste, bis sie wieder weg war. Sie ist immer noch da.",
+      "der Hund meiner Freundin mich gebissen hat. Er hat recht, ich mag ihn auch nicht.",
+      "ich auf einer Beerdigung war. Ich kannte den Typen nicht, aber das Apéro war gratis.",
+      "mein Grosi mich gebeten hat, ihr das Handy zu erklären. Wir sind jetzt bei Schritt 2 von 1.",
+      "meine Freundin mit mir 'reden' wollte. Ich lebe noch, aber nur knapp.",
+      "unser Hamster entkommen ist. Wir haben ihn gefunden. Im Staubsauger. Er hat es nicht geschafft, der Staubsauger übrigens auch nicht.",
+      "ich meinen eigenen Grabstein aussuchen wollte, solange die Preise noch tief sind. Marmor ist gerade im Angebot.",
+      "mein Grossvater in seinen Erinnerungen an den Krieg hängengeblieben ist. Er war nie im Krieg. Er hat nur sehr viel Netflix geschaut.",
+      "ich das Geburtstagsgeschenk für Grosi kaufen musste. Ich habe ihr eine Lebensversicherung geschenkt. Für mich.",
+      "die Katze sich auf meine Laptoptastatur gelegt und meine Bachelorarbeit gelöscht hat. Ich habe mich noch nicht entschieden, wer von uns beiden auszieht.",
+      "ich den Rasen mähen musste und dabei herausgefunden habe, wo der Hund vom Nachbarn letztes Jahr verschwunden ist. Lange Geschichte. Ich war es nicht.",
+      "meine Freundin wollte, dass ich ihre Eltern kennenlerne. Ihr Vater hat mir gezeigt, wo er seine Jagdgewehre aufbewahrt. Ich bin geflohen.",
+      "ich beim Grosi Kaffee trinken musste. Sie hat Salz statt Zucker genommen. Wieder. Ich glaube langsam, sie macht das absichtlich.",
+      "mein Hund gestorben ist. Er war 16. In Hundejahren 112. Ehrlich gesagt war er einfach müde von mir.",
+      "das Altersheim angerufen hat, weil Grosi wieder versucht hat, mit dem Rollator auszubrechen. Sie kam bis zum Coop.",
+      "ich am Grab vom Grossvater war. Ich wollte ihm nur sagen, dass ich sein Auto verkauft habe.",
+      "meine Freundin Schluss gemacht hat. Und dann wieder nicht. Und dann wieder doch. Ich bin jetzt einfach müde.",
+      "mein Mitbewohner seit einer Woche nicht aus seinem Zimmer gekommen ist. Es riecht komisch. Ich wollte es nicht als Erster melden.",
+      "ich mit meinem Grosi die Liste durchgehen musste, wer an ihrer Beerdigung NICHT eingeladen ist. Du stehst drauf.",
+      "die Katze erbrochen hat. In meine Schuhe. Beide. Sie wusste genau, was sie tat.",
+      "ich meinen Wellensittich beerdigt habe. Der Nachbar hat ihn dann wieder ausgegraben, weil er dachte, es sei sein Hund, der etwas vergraben hat. Kompliziert.",
+      "mein Grosi online gegangen ist und sich online in einen 'Prinzen' verliebt hat, der dringend ihr ganzes Erspartes braucht. Ich musste zuerst mein Erbe retten.",
+      "meine Freundin will, dass ich mehr Gefühle zeige. Ich habe heute Morgen eine Stunde lang geübt.",
+      "der Pfarrer an der Beerdigung den falschen Namen gesagt hat und ich die Gelegenheit genutzt habe, offiziell für tot erklärt zu werden.",
+      "ich bei Grosi den Rasen mähen sollte. Sie hat keinen Rasen. Sie wollte nur, dass jemand mit ihr redet. Das hat drei Stunden gedauert.",
+      "mein Grossonkel mich als Alleinerben eingesetzt hat. Er hat 12'000 Franken Schulden und eine Ziege. Ich musste die Ziege abholen.",
+      "meine Katze mich heute Morgen so angesehen hat, als würde sie meinen Tod planen. Ich habe mich zur Sicherheit im Bad eingeschlossen.",
+      "ich meine Freundin vom Flughafen abholen musste. Sie war nicht dort. Sie war nie dort. Ich glaube, sie war ein Traum.",
+      "mein Grosi gestern 100 geworden ist und die Gemeinde ihr eine Urkunde geschickt hat. Wir haben gefeiert, bis sie eingeschlafen ist. Hoffentlich nur eingeschlafen.",
+      "ich auf dem Weg von einer Taube angekackt wurde, und das war ehrlich gesagt das Netteste, was heute jemand für mich getan hat.",
+    ];
+
+    let deck = [];
+    let seen = 0;
+
+    function shuffle(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function nextExcuse() {
+      if (deck.length === 0) deck = shuffle([...EXCUSES]);   // no repeats until all are used
+      const text = deck.pop();
+      seen++;
+
+      const el = document.getElementById("excuse");
+      el.textContent = "… " + text;
+      el.classList.remove("pop");
+      void el.offsetWidth;
+      el.classList.add("pop");
+
+      const cred = Math.floor(Math.random() * 23);          // credibility: always bad
+      document.getElementById("cred").textContent = cred + "%";
+      document.getElementById("fill").style.width = cred + "%";
+
+      document.getElementById("count").textContent =
+        `${seen} Ausrede${seen === 1 ? "" : "n"} benutzt · noch ${deck.length} bis alle durch sind`;
+    }
+
+    document.getElementById("next").addEventListener("click", nextExcuse);
+
+    document.getElementById("copy").addEventListener("click", () => {
+      const text = "Sorry, ich komme zu spät, weil " +
+        document.getElementById("excuse").textContent.replace(/^… /, "");
+      navigator.clipboard.writeText(text).then(() => {
+        const b = document.getElementById("copy");
+        b.textContent = "✅ Kopiert";
+        setTimeout(() => b.textContent = "📋 Kopieren", 1200);
+      });
+    });
+  </script>
+</body>
+</html>
