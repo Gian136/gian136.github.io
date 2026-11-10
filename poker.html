@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poker Odds</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: radial-gradient(circle at top, #1d6b45, #0e3b25);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 40px;
+    }
+    h1 { margin: 10px 0 2px; font-size: 2rem; }
+    .sub { opacity: .75; margin-bottom: 14px; text-align: center; }
+    h2 { font-size: 1rem; margin: 18px 0 8px; font-weight: 600; opacity: .9; text-align: center; }
+
+    /* Players */
+    .players { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+    .pbtn {
+      width: 42px; height: 42px; border-radius: 50%; border: 2px solid #fff;
+      background: transparent; color: #fff; font-size: 1rem; cursor: pointer;
+    }
+    .pbtn.active { background: #f5c542; border-color: #f5c542; color: #222; font-weight: 800; }
+
+    /* Slots (your hand + table) */
+    .slots-wrap { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+    .slot-group { text-align: center; }
+    .slot-group .label { font-size: .85rem; opacity: .8; margin-bottom: 6px; }
+    .slot-group.target .label { color: #f5c542; font-weight: 700; opacity: 1; }
+    .slots { display: flex; gap: 6px; justify-content: center; }
+    .slot {
+      width: 46px; height: 64px; border-radius: 8px; border: 2px dashed rgba(255,255,255,.4);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 1.1rem; cursor: pointer;
+    }
+    .slot.filled { background: #fff; border: none; box-shadow: 0 3px 6px rgba(0,0,0,.35); }
+    .slot .s { font-size: 1.2rem; line-height: 1; }
+    .red { color: #d11f2f; }
+    .black { color: #111; }
+    .stage { margin-top: 8px; font-weight: 700; letter-spacing: .05em; color: #f5c542; }
+
+    /* Results */
+    .results {
+      margin-top: 16px; background: rgba(0,0,0,.3); border-radius: 16px; padding: 16px 22px;
+      text-align: center; min-width: 280px; max-width: 460px; width: 100%; box-sizing: border-box;
+    }
+    .big { font-size: 3rem; font-weight: 800; line-height: 1.1; }
+    .big-label { opacity: .85; }
+    .bar { height: 12px; border-radius: 6px; background: rgba(255,255,255,.15); overflow: hidden; margin: 12px 0 10px; display: flex; }
+    .bar div { height: 100%; transition: width .3s; }
+    .stats { display: flex; justify-content: space-around; gap: 10px; flex-wrap: wrap; font-size: .95rem; }
+    .stats b { display: block; font-size: 1.3rem; }
+    .handname { margin-top: 10px; font-weight: 700; color: #f5c542; min-height: 1.2em; }
+    .note { font-size: .78rem; opacity: .65; margin-top: 8px; }
+
+    .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+    .ctrl {
+      padding: 8px 14px; border-radius: 10px; border: none; cursor: pointer;
+      background: rgba(255,255,255,.15); color: #fff; font-size: .95rem;
+    }
+    .ctrl:hover { background: rgba(255,255,255,.25); }
+
+    /* Deck */
+    #deck { width: 100%; max-width: 760px; margin-top: 6px; }
+    .suit-row { display: grid; grid-template-columns: repeat(13, 1fr); gap: 4px; margin-bottom: 6px; }
+    .card {
+      background: #fff; border-radius: 6px; padding: 6px 0; text-align: center; cursor: pointer;
+      user-select: none; font-weight: 800; box-shadow: 0 2px 4px rgba(0,0,0,.3);
+      transition: transform .1s, opacity .2s, filter .2s;
+    }
+    .card:hover { transform: translateY(-2px); }
+    .card .s { display: block; font-size: 1rem; }
+    .card.mine  { outline: 3px solid #f5c542; filter: grayscale(.6); opacity: .45; }
+    .card.board { outline: 3px solid #5ab0ff; filter: grayscale(.6); opacity: .45; }
+
+    @media (max-width: 560px) {
+      .suit-row { grid-template-columns: repeat(7, 1fr); }
+      .slot { width: 40px; height: 56px; font-size: 1rem; }
+      .big { font-size: 2.4rem; }
+    }
+  </style>
+</head>
+<body>
+  <h1>♠️ Poker Odds</h1>
+  <div class="sub">Texas Hold'em · how likely is someone better than you?</div>
+
+  <h2>Number of opponents</h2>
+  <div class="players" id="players"></div>
+
+  <div class="slots-wrap">
+    <div class="slot-group" id="handGroup">
+      <div class="label">Your cards</div>
+      <div class="slots" id="handSlots"></div>
+    </div>
+    <div class="slot-group" id="boardGroup">
+      <div class="label">Table</div>
+      <div class="slots" id="boardSlots"></div>
+    </div>
+  </div>
+  <div class="stage" id="stage">PRE-FLOP</div>
+
+  <div class="results">
+    <div class="big-label">Chance at least one opponent is better</div>
+    <div class="big" id="lose">–</div>
+    <div class="bar">
+      <div id="barWin"  style="background:#4cd07d;width:0"></div>
+      <div id="barTie"  style="background:#f5c542;width:0"></div>
+      <div id="barLose" style="background:#ff6b6b;width:0"></div>
+    </div>
+    <div class="stats">
+      <div>You win<b id="win">–</b></div>
+      <div>Split<b id="tie">–</b></div>
+      <div>Each single opponent<b id="single">–</b></div>
+    </div>
+    <div class="handname" id="handname"></div>
+    <div class="note" id="note">Pick your 2 cards to start.</div>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl" id="undo">↩︎ Undo</button>
+    <button class="ctrl" id="newHand">🔄 New hand</button>
+  </div>
+
+  <h2 id="pickTitle">Tap your 2 cards</h2>
+  <div id="deck"></div>
+
+  <script>
+    // ---------- cards ----------
+    // A card is a number 0..51: rank = (c >> 2) + 2  (2..14, 14 = Ace), suit = c & 3
+    const SUITS = ["♠", "♥", "♦", "♣"];
+    const RANK_TXT = { 10: "10", 11: "J", 12: "Q", 13: "K", 14: "A" };
+    const rankOf = c => (c >> 2) + 2;
+    const suitOf = c => c & 3;
+    const rankTxt = r => RANK_TXT[r] || String(r);
+    const isRed = c => suitOf(c) === 1 || suitOf(c) === 2;
+
+    // ---------- state ----------
+    let opponents = 1;
+    let hand = [];
+    let board = [];
+    let history = [];      // order cards were picked, for Undo
+
+    // ---------- hand evaluator (best 5 of up to 7 cards) ----------
+    // Returns a number: higher = better hand.
+    // Category: 8 straight flush, 7 quads, 6 full house, 5 flush, 4 straight,
+    //           3 trips, 2 two pair, 1 pair, 0 high card
+    function score(cat, ...vals) {
+      let s = cat;
+      for (let i = 0; i < 5; i++) s = s * 16 + (vals[i] || 0);
+      return s;
+    }
+
+    function straightHigh(mask) {
+      if (mask & (1 << 14)) mask |= 1 << 1;          // Ace can be low (A-2-3-4-5)
+      for (let hi = 14; hi >= 5; hi--) {
+        if (((mask >> (hi - 4)) & 31) === 31) return hi;
+      }
+      return 0;
+    }
+
+    function topBits(mask, n, exclude = []) {
+      const out = [];
+      for (let r = 14; r >= 2 && out.length < n; r--) {
+        if ((mask & (1 << r)) && !exclude.includes(r)) out.push(r);
+      }
+      return out;
+    }
+
+    function evaluate(cards) {
+      const count = new Array(15).fill(0);
+      const suitCount = [0, 0, 0, 0];
+      const suitMask = [0, 0, 0, 0];
+      let mask = 0;
+      for (const c of cards) {
+        const r = rankOf(c), s = suitOf(c);
+        count[r]++; suitCount[s]++;
+        suitMask[s] |= 1 << r; mask |= 1 << r;
+      }
+
+      // flush / straight flush
+      let flushScore = 0;
+      for (let s = 0; s < 4; s++) {
+        if (suitCount[s] >= 5) {
+          const sf = straightHigh(suitMask[s]);
+          if (sf) return score(8, sf);
+          flushScore = score(5, ...topBits(suitMask[s], 5));
+        }
+      }
+
+      const quads = [], trips = [], pairs = [];
+      for (let r = 14; r >= 2; r--) {
+        switch (count[r]) {
+          case 4: quads.push(r); break;
+          case 3: trips.push(r); break;
+          case 2: pairs.push(r); break;
+        }
+      }
+
+      if (quads.length) return score(7, quads[0], ...topBits(mask, 1, [quads[0]]));
+      if (trips.length && (trips.length > 1 || pairs.length)) {
+        const p = Math.max(trips[1] || 0, pairs[0] || 0);
+        return score(6, trips[0], p);
+      }
+      if (flushScore) return flushScore;
+      const st = straightHigh(mask);
+      if (st) return score(4, st);
+      if (trips.length) return score(3, trips[0], ...topBits(mask, 2, [trips[0]]));
+      if (pairs.length >= 2) return score(2, pairs[0], pairs[1], ...topBits(mask, 1, [pairs[0], pairs[1]]));
+      if (pairs.length) return score(1, pairs[0], ...topBits(mask, 3, [pairs[0]]));
+      return score(0, ...topBits(mask, 5));
+    }
+
+    const HAND_NAMES = ["High card", "Pair", "Two pair", "Three of a kind", "Straight",
+                        "Flush", "Full house", "Four of a kind", "Straight flush"];
+    const category = sc => Math.floor(sc / 16 ** 5);
+
+    // ---------- Monte Carlo simulation ----------
+    function simulate(iterations) {
+      const known = new Set([...hand, ...board]);
+      const deck = [];
+      for (let c = 0; c < 52; c++) if (!known.has(c)) deck.push(c);
+
+      const needBoard = 5 - board.length;
+      const needed = needBoard + 2 * opponents;
+      let win = 0, tie = 0, lose = 0, oppBetter = 0;
+
+      for (let it = 0; it < iterations; it++) {
+        // partial shuffle: pick `needed` random cards to the front
+        for (let i = 0; i < needed; i++) {
+          const j = i + Math.floor(Math.random() * (deck.length - i));
+          const t = deck[i]; deck[i] = deck[j]; deck[j] = t;
+        }
+        const fullBoard = board.concat(deck.slice(0, needBoard));
+        const me = evaluate(hand.concat(fullBoard));
+
+        let best = 0, anyBetter = false, anyEqual = false;
+        for (let o = 0; o < opponents; o++) {
+          const k = needBoard + 2 * o;
+          const opp = evaluate([deck[k], deck[k + 1], ...fullBoard]);
+          if (opp > me) { anyBetter = true; oppBetter++; }
+          else if (opp === me) anyEqual = true;
+        }
+        if (anyBetter) lose++;
+        else if (anyEqual) tie++;
+        else win++;
+      }
+      return {
+        win: win / iterations,
+        tie: tie / iterations,
+        lose: lose / iterations,
+        single: oppBetter / (iterations * opponents),
+      };
+    }
+
+    // ---------- UI ----------
+    const pct = x => (x * 100).toFixed(1) + "%";
+
+    function cardHTML(c) {
+      return `<span class="${isRed(c) ? "red" : "black"}">${rankTxt(rankOf(c))}<span class="s">${SUITS[suitOf(c)]}</span></span>`;
+    }
+
+    function renderPlayers() {
+      let html = "";
+      for (let n = 1; n <= 9; n++) {
+        html += `<button class="pbtn ${n === opponents ? "active" : ""}" data-n="${n}">${n}</button>`;
+      }
+      document.getElementById("players").innerHTML = html;
+    }
+
+    function renderSlots() {
+      const slot = (c, where, i) => c === undefined
+        ? `<div class="slot"></div>`
+        : `<div class="slot filled" data-where="${where}" data-i="${i}">${cardHTML(c)}</div>`;
+
+      let h = "";
+      for (let i = 0; i < 2; i++) h += slot(hand[i], "hand", i);
+      document.getElementById("handSlots").innerHTML = h;
+
+      let b = "";
+      for (let i = 0; i < 5; i++) b += slot(board[i], "board", i);
+      document.getElementById("boardSlots").innerHTML = b;
+
+      const pickingHand = hand.length < 2;
+      document.getElementById("handGroup").classList.toggle("target", pickingHand);
+      document.getElementById("boardGroup").classList.toggle("target", !pickingHand && board.length < 5);
+
+      let stage;
+      switch (board.length) {
+        case 0: stage = "PRE-FLOP"; break;
+        case 1: case 2: stage = "FLOP (add " + (3 - board.length) + " more)"; break;
+        case 3: stage = "FLOP"; break;
+        case 4: stage = "TURN"; break;
+        default: stage = "RIVER";
+      }
+      document.getElementById("stage").textContent = stage;
+
+      let title;
+      if (pickingHand) title = `Tap your ${2 - hand.length} card${hand.length === 1 ? "" : "s"}`;
+      else if (board.length < 3) title = "Tap the flop cards (3)";
+      else if (board.length === 3) title = "Tap the turn card";
+      else if (board.length === 4) title = "Tap the river card";
+      else title = "All cards are out";
+      document.getElementById("pickTitle").textContent = title;
+    }
+
+    function renderDeck() {
+      let html = "";
+      for (let s = 0; s < 4; s++) {
+        html += `<div class="suit-row">`;
+        for (let r = 14; r >= 2; r--) {
+          const c = (r - 2) * 4 + s;
+          let cls = "card";
+          if (hand.includes(c)) cls += " mine";
+          if (board.includes(c)) cls += " board";
+          html += `<div class="${cls}" data-c="${c}">${cardHTML(c)}</div>`;
+        }
+        html += `</div>`;
+      }
+      document.getElementById("deck").innerHTML = html;
+    }
+
+    function renderResults() {
+      const ids = ["lose", "win", "tie", "single"];
+      if (hand.length < 2) {
+        ids.forEach(id => document.getElementById(id).textContent = "–");
+        ["barWin", "barTie", "barLose"].forEach(id => document.getElementById(id).style.width = "0");
+        document.getElementById("handname").textContent = "";
+        document.getElementById("note").textContent = "Pick your 2 cards to start.";
+        return;
+      }
+
+      const r = simulate(30000);
+      document.getElementById("lose").textContent = pct(r.lose);
+      document.getElementById("win").textContent = pct(r.win);
+      document.getElementById("tie").textContent = pct(r.tie);
+      document.getElementById("single").textContent = pct(r.single);
+      document.getElementById("barWin").style.width = pct(r.win);
+      document.getElementById("barTie").style.width = pct(r.tie);
+      document.getElementById("barLose").style.width = pct(r.lose);
+
+      const all = hand.concat(board);
+      document.getElementById("handname").textContent =
+        all.length >= 5 ? "You have: " + HAND_NAMES[category(evaluate(all))] : "";
+      document.getElementById("note").textContent =
+        `vs ${opponents} opponent${opponents > 1 ? "s" : ""} with random cards, at showdown · 30'000 simulated deals`;
+    }
+
+    function renderAll() {
+      renderPlayers();
+      renderSlots();
+      renderDeck();
+      renderResults();
+    }
+
+    // ---------- clicks ----------
+    document.getElementById("players").addEventListener("click", e => {
+      const b = e.target.closest(".pbtn");
+      if (!b) return;
+      opponents = Number(b.dataset.n);
+      renderAll();
+    });
+
+    function removeCard(c) {
+      hand = hand.filter(x => x !== c);
+      board = board.filter(x => x !== c);
+      history = history.filter(x => x !== c);
+    }
+
+    document.getElementById("deck").addEventListener("click", e => {
+      const el = e.target.closest(".card");
+      if (!el) return;
+      const c = Number(el.dataset.c);
+
+      if (hand.includes(c) || board.includes(c)) {
+        removeCard(c);                       // second click: unselect
+      } else if (hand.length < 2) {
+        hand.push(c); history.push(c);       // first your hand
+      } else if (board.length < 5) {
+        board.push(c); history.push(c);      // then the table
+      } else {
+        return;                              // everything full
+      }
+      renderAll();
+    });
+
+    // tapping a filled slot removes that card
+    document.querySelector(".slots-wrap").addEventListener("click", e => {
+      const el = e.target.closest(".slot.filled");
+      if (!el) return;
+      const c = el.dataset.where === "hand" ? hand[el.dataset.i] : board[el.dataset.i];
+      removeCard(c);
+      renderAll();
+    });
+
+    document.getElementById("undo").addEventListener("click", () => {
+      const c = history.pop();
+      if (c !== undefined) { removeCard(c); renderAll(); }
+    });
+
+    document.getElementById("newHand").addEventListener("click", () => {
+      hand = []; board = []; history = [];
+      renderAll();
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>
