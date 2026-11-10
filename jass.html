@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jass-Zähler</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #1f5c3a;           /* green Jass-Teppich */
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 40px;
+    }
+    h1 { margin: 10px 0 4px; font-size: 2rem; }
+    h2 { font-size: 1.1rem; margin: 22px 0 10px; font-weight: 600; opacity: .9; }
+
+    /* Trumpf buttons */
+    .trumps { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+    .trump {
+      font-size: 1rem; padding: 10px 16px; border-radius: 999px; border: 2px solid #fff;
+      background: transparent; color: #fff; cursor: pointer; transition: all .15s;
+    }
+    .trump:hover { background: rgba(255,255,255,.15); }
+    .trump.active { background: #fff; color: #1f5c3a; font-weight: 700; transform: scale(1.06); }
+
+    /* Score board */
+    .score {
+      margin-top: 22px; background: rgba(0,0,0,.25); border-radius: 16px;
+      padding: 14px 24px; text-align: center; min-width: 240px; position: relative;
+    }
+    #total { font-size: 3rem; font-weight: 800; }
+    #rest  { opacity: .8; }
+    #delta {
+      position: absolute; right: 18px; top: 12px; font-weight: 800; font-size: 1.4rem; opacity: 0;
+    }
+    #delta.show { animation: floatUp .9s ease-out; }
+    @keyframes floatUp {
+      0%   { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-30px); }
+    }
+
+    .extras { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+    .extra {
+      font-size: .95rem; padding: 8px 14px; border-radius: 10px; border: none; cursor: pointer;
+      background: rgba(255,255,255,.15); color: #fff;
+    }
+    .extra.on { background: #f5c542; color: #333; font-weight: 700; }
+
+    /* Cards */
+    #cards { width: 100%; max-width: 900px; }
+    .suit-row { margin-bottom: 14px; }
+    .suit-name { font-weight: 700; margin: 0 0 6px 4px; }
+    .row { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+    .card {
+      background: #fff; color: #222; border-radius: 10px; padding: 8px 2px; text-align: center;
+      cursor: pointer; user-select: none; border-top: 6px solid var(--c);
+      box-shadow: 0 3px 6px rgba(0,0,0,.3); transition: transform .12s, filter .2s, opacity .2s;
+    }
+    .card:hover { transform: translateY(-3px); }
+    .card .sym  { font-size: 1.4rem; }
+    .card .rank { font-weight: 800; font-size: 1rem; }
+    .card .pts  { font-size: .8rem; color: #666; }
+    .card.taken { filter: grayscale(1); opacity: .4; transform: scale(.94); }
+    .card.trumpcard { box-shadow: 0 0 0 3px #f5c542, 0 3px 6px rgba(0,0,0,.3); }
+
+    #hint { opacity: .85; margin-top: 18px; text-align: center; }
+
+    @media (max-width: 560px) {
+      .row { grid-template-columns: repeat(5, 1fr); }
+      .card .sym { font-size: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+  <h1>🃏 Jass-Zähler</h1>
+
+  <h2>1. Was isch Trumpf?</h2>
+  <div class="trumps">
+    <button class="trump" data-mode="schellen">🔔 Schellen</button>
+    <button class="trump" data-mode="schilten">🛡️ Schilten</button>
+    <button class="trump" data-mode="rosen">🌹 Rosen</button>
+    <button class="trump" data-mode="eicheln">🌰 Eicheln</button>
+    <button class="trump" data-mode="obenabe">⬇️ Obenabe</button>
+    <button class="trump" data-mode="undenufe">⬆️ Undenufe</button>
+  </div>
+
+  <div class="score">
+    <div>Eui Punkt</div>
+    <div id="total">0</div>
+    <div id="rest">Gegner: 157</div>
+    <div id="delta"></div>
+  </div>
+
+  <div class="extras">
+    <button class="extra" id="last">Letschte Stich +5</button>
+    <button class="extra" id="reset">🔄 Neui Runde</button>
+  </div>
+
+  <h2>2. Tipp die Charte a, wo ihr gmacht händ</h2>
+  <div id="cards"></div>
+
+  <script>
+    const SUITS = {
+      schellen: { name: "Schellen", sym: "🔔", color: "#e0a000" },
+      schilten: { name: "Schilten", sym: "🛡️", color: "#2a2a2a" },
+      rosen:    { name: "Rosen",    sym: "🌹", color: "#d63a3a" },
+      eicheln:  { name: "Eicheln",  sym: "🌰", color: "#8a5a2b" },
+    };
+    const RANKS = ["6", "7", "8", "9", "10", "U", "O", "K", "A"];
+
+    // --- game state ---
+    let trump = null;          // e.g. "rosen", "obenabe", "undenufe"
+    const taken = new Set();   // cards you made, e.g. "rosen-A"
+    let lastTrick = false;
+    let shownTotal = 0;
+
+    // How many points one card is worth for the chosen Trumpf
+    function points(suit, rank, trump) {
+      switch (trump) {
+        case "obenabe":
+          switch (rank) {
+            case "A":  return 11;
+            case "10": return 10;
+            case "8":  return 8;
+            case "K":  return 4;
+            case "O":  return 3;
+            case "U":  return 2;
+            default:   return 0;
+          }
+
+        case "undenufe":
+          switch (rank) {
+            case "6":  return 11;
+            case "10": return 10;
+            case "8":  return 8;
+            case "K":  return 4;
+            case "O":  return 3;
+            case "U":  return 2;
+            default:   return 0;
+          }
+
+        default: // a suit is Trumpf
+          if (suit === trump) {
+            switch (rank) {
+              case "U":  return 20;  // Puur
+              case "9":  return 14;  // Nell
+              case "A":  return 11;
+              case "10": return 10;
+              case "K":  return 4;
+              case "O":  return 3;
+              default:   return 0;
+            }
+          } else {
+            switch (rank) {
+              case "A":  return 11;
+              case "10": return 10;
+              case "K":  return 4;
+              case "O":  return 3;
+              case "U":  return 2;
+              default:   return 0;
+            }
+          }
+      }
+    }
+
+    function total() {
+      if (trump === null) return 0;
+      let s = 0;
+      for (const card of taken) {
+        const [suit, rank] = card.split("-");
+        s += points(suit, rank, trump);
+      }
+      if (lastTrick) s += 5;
+      return s;
+    }
+
+    function showDelta(diff) {
+      if (diff === 0) return;
+      const el = document.getElementById("delta");
+      el.textContent = diff > 0 ? "+" + diff : String(diff);
+      el.style.color = diff > 0 ? "#7CFC7C" : "#ff8a8a";
+      el.classList.remove("show");
+      void el.offsetWidth;   // restart animation
+      el.classList.add("show");
+    }
+
+    function render() {
+      const cards = document.getElementById("cards");
+
+      if (trump === null) {
+        cards.innerHTML = '<div id="hint">👆 Wähl zerscht de Trumpf.</div>';
+      } else {
+        let html = "";
+        for (const [suit, s] of Object.entries(SUITS)) {
+          const isTrumpSuit = suit === trump;
+          html += `<div class="suit-row"><div class="suit-name">${s.sym} ${s.name}${isTrumpSuit ? " ⭐ Trumpf" : ""}</div><div class="row">`;
+          for (const rank of RANKS) {
+            const id = `${suit}-${rank}`;
+            let classes = "card";
+            if (taken.has(id)) classes += " taken";
+            if (isTrumpSuit) classes += " trumpcard";
+            html += `<div class="${classes}" data-id="${id}" style="--c:${s.color}">
+                       <div class="sym">${s.sym}</div>
+                       <div class="rank">${rank}</div>
+                       <div class="pts">${points(suit, rank, trump)} P</div>
+                     </div>`;
+          }
+          html += "</div></div>";
+        }
+        cards.innerHTML = html;
+      }
+
+      const t = total();
+      showDelta(t - shownTotal);
+      shownTotal = t;
+      document.getElementById("total").textContent = t;
+      document.getElementById("rest").textContent = "Gegner: " + (157 - t);
+      document.getElementById("last").classList.toggle("on", lastTrick);
+    }
+
+    // --- click handlers ---
+    document.querySelectorAll(".trump").forEach(btn => {
+      btn.addEventListener("click", () => {
+        trump = btn.dataset.mode;
+        document.querySelectorAll(".trump").forEach(b =>
+          b.classList.toggle("active", b === btn));
+        render();
+      });
+    });
+
+    document.getElementById("cards").addEventListener("click", e => {
+      const card = e.target.closest(".card");
+      if (!card) return;
+      const id = card.dataset.id;
+      if (taken.has(id)) taken.delete(id);   // second click: colored again
+      else taken.add(id);                    // first click: turns gray
+      render();
+    });
+
+    document.getElementById("last").addEventListener("click", () => {
+      lastTrick = !lastTrick;
+      render();
+    });
+
+    document.getElementById("reset").addEventListener("click", () => {
+      taken.clear();
+      lastTrick = false;
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
